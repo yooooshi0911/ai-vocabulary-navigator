@@ -1,18 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// VercelのEdge Runtimeで動作するように設定
 export const runtime = 'edge';
 
 export async function POST(req: Request) {
   try {
     const { word, mode, context, question } = await req.json();
-
-    if (!mode) {
-      return new Response("Invalid request: 'mode' is required.", { status: 400 });
-    }
+    if (!mode) return new Response("Invalid request", { status: 400 });
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-    
     let modelName: string = 'gemini-2.5-flash';
     let prompt: string;
 
@@ -22,7 +17,7 @@ export async function POST(req: Request) {
         prompt = `英単語「${word}」の最も重要な日本語の意味を、3つまで箇条書き（「・」で始める）で出力してください。解説は不要です。`;
         break;
       case 'deep_dive':
-        prompt = `あなたはプロの言語学者です。英単語「${word}」について、以下の形式で厳密に解説してください。\n\n### 主な意味\n(重要な意味を箇条書きで3つまで)\n\n---\n\n### 例文\n(異なる文脈の例文を3つ、箇条書き「- 」で提示し、各例文の後に()で日本語訳を併記)\n\n---\n\n### AIによる解説\n(単語の核心イメージ、ニュアンス、類義語との違いを分かりやすく解説)`;
+        prompt = `あなたはプロの言語学者です。英単語「${word}」について、以下の形式で厳密に解説してください。\n\n### 主な意味\n(重要な意味を箇条書きで3つまで)\n\n---\n\n### 例文\n(異なる文脈の例文を3つ、箇条書き「- 」で提示し、**各例文の後には必ず()で自然な日本語訳を併記**してください。)\n\n---\n\n### AIによる解説\n(単語の核心イメージ、ニュアンス、類義語との違いを分かりやすく解説)`;
         break;
       case 'explain_further':
         prompt = `あなたは教えるのが上手い家庭教師です。以下の単語と解説を、より初心者がイメージしやすいように、具体的な例え話や違う角度からの説明を加えて、さらに分かりやすく説明しなおしてください。\n\n# 英単語:\n${word}\n\n# 解説の文脈:\n${context}`;

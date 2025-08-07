@@ -24,8 +24,13 @@ export default function MainPage() {
   const [additionalResult, setAdditionalResult] = useState('');
   const [isAdditionalLoading, setIsAdditionalLoading] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
 
-  useEffect(() => { setCurrentMode(defaultMode); }, [defaultMode]);
+  useEffect(() => {
+    // 【★バグ修正★】デフォルトモードがディープの時、isFlippedも追従させる
+    setCurrentMode(defaultMode);
+    setIsFlipped(defaultMode === 'deep_dive');
+  }, [defaultMode]);
 
   useEffect(() => {
     const checkSidebar = () => {
@@ -39,8 +44,13 @@ export default function MainPage() {
     return () => window.removeEventListener('resize', checkSidebar);
   }, []);
 
-  const streamApiCall = useCallback(async (body: object, onChunk: (html: string) => void, onDone: (fullText: string) => void) => {
+  const streamApiCall = useCallback(async (
+    body: object,
+    onChunk: (html: string) => void,
+    onDone: (fullText: string) => void
+  ) => {
     let fullText = '';
+    setIsStreaming(true);
     try {
       const response = await fetch('/api/gemini', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!response.ok || !response.body) throw new Error("API Error");
@@ -56,34 +66,42 @@ export default function MainPage() {
     } catch (error) {
       console.error("API Call failed:", error);
       onChunk("<p class='text-red-500'>エラーが発生しました。</p>");
+    } finally {
+      setIsStreaming(false);
     }
   }, []);
 
-  const handleMainSearch = useCallback(async (term: string, mode: Mode) => {
+  const handleMainSearch = useCallback(async (term: string, mode: Mode, forceRegenerate = false) => {
     if (window.innerWidth < 768 && useAppStore.getState().isSidebarOpen) { useAppStore.getState().toggleSidebar(); }
-    if (wordData[term]?.[mode]) {
+    
+    if (!forceRegenerate && wordData[term]?.[mode]) {
       setResult(wordData[term][mode]!);
       setSearchedWord(term);
       setAdditionalResult('');
       return;
     }
+    
     setIsLoading(true);
     setResult('');
     setAdditionalResult('');
     setSearchedWord(term);
-    addWordToHistory(term);
+    if (!forceRegenerate) {
+      addWordToHistory(term);
+    }
     await streamApiCall(
       { word: term, mode: mode },
-      (html) => setResult(html),
+      (html) => {
+        setIsLoading(false);
+        setResult(html);
+      },
       (finalHtml) => setWordData(term, mode, finalHtml)
     );
-    setIsLoading(false);
   }, [wordData, addWordToHistory, setWordData, streamApiCall]);
 
   const handleDeepDrill = useCallback(async (type: 'explain_further' | 'custom_question', context: string, question?: string) => {
     setIsAdditionalLoading(true);
     setAdditionalResult('');
-    const requestBody = { word: searchedWord, mode: type, context, question };
+    const requestBody = { word: searchedWord, mode: type, context: context, question: question };
     await streamApiCall(
       requestBody,
       (html) => setAdditionalResult(html),
@@ -96,18 +114,18 @@ export default function MainPage() {
   }, [searchedWord, streamApiCall, addDrillDownData]);
 
   const handleExplainFurther = useCallback(() => {
-    const mainContent = wordData[searchedWord]?.[currentMode];
+    const mainContent = wordData[searchedWord]?.deep_dive;
     if (!mainContent) return;
     const plainText = mainContent.replace(/<[^>]*>/g, '\n').replace(/\n+/g, '\n').trim();
     handleDeepDrill('explain_further', plainText);
-  }, [wordData, searchedWord, currentMode, handleDeepDrill]);
+  }, [wordData, searchedWord, handleDeepDrill]);
   
   const handleCustomQuestion = useCallback((question: string) => {
-    const mainContent = wordData[searchedWord]?.[currentMode];
+    const mainContent = wordData[searchedWord]?.deep_dive;
     if (!mainContent) return;
     const plainText = mainContent.replace(/<[^>]*>/g, '\n').replace(/\n+/g, '\n').trim();
     handleDeepDrill('custom_question', plainText, question);
-  }, [wordData, searchedWord, currentMode, handleDeepDrill]);
+  }, [wordData, searchedWord, handleDeepDrill]);
 
   useEffect(() => {
     if (searchedWord) { handleMainSearch(searchedWord, currentMode); }
@@ -118,15 +136,15 @@ export default function MainPage() {
     e.preventDefault();
     if (!word.trim() || isLoading) return;
     if (searchedWord === word) return;
-    setIsFlipped(false);
     setCurrentMode(defaultMode);
+    setIsFlipped(defaultMode === 'deep_dive'); // ★バグ修正
     setSearchedWord(word);
   };
   
   const handleHistoryClick = (historyWord: string) => {
     setWord(historyWord);
-    setIsFlipped(false);
     setCurrentMode(defaultMode);
+    setIsFlipped(defaultMode === 'deep_dive'); // ★バグ修正
     setSearchedWord(historyWord);
   };
 
@@ -135,21 +153,35 @@ export default function MainPage() {
     setCurrentMode(newMode);
   };
   
+  const handleRegenerate = () => {
+    if (searchedWord) {
+      handleMainSearch(searchedWord, currentMode, true);
+    }
+  };
+  
+  const handleHomeClick = () => {
+    setSearchedWord('');
+    setWord('');
+    setResult('');
+    setAdditionalResult('');
+    setIsFlipped(false);
+  };
+  
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <div className={`fixed md:static z-30 h-full transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
         <Sidebar onHistoryClick={handleHistoryClick} />
       </div>
-      {isSidebarOpen && ( <div onClick={toggleSidebar} className="fixed inset-0 bg-black/60 z-20 md:hidden" aria-hidden="true" /> )}
+      {isSidebarOpen && ( <div onClick={useAppStore.getState().toggleSidebar} className="fixed inset-0 bg-black/60 z-20 md:hidden" aria-hidden="true" /> )}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="p-3 border-b border-border sticky top-0 z-20 flex items-center gap-2 bg-background/80 backdrop-blur-sm">
           <button onClick={toggleSidebar} className="md:hidden p-2 rounded-lg hover:bg-accent text-foreground">
             {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
-          <div className="flex items-center gap-3">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-primary flex-shrink-0"><path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 7L12 12L22 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 12V22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <button onClick={handleHomeClick} className="flex items-center gap-3 group">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-primary flex-shrink-0 group-hover:scale-110 transition-transform"><path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 7L12 12L22 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 12V22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             <h1 className="text-lg font-bold tracking-tight hidden sm:block">AI Vocabulary Navigator</h1>
-          </div>
+          </button>
         </header>
         <main className="flex-1 px-4 pb-4 md:px-8 md:pb-8 overflow-y-auto">
           <div className="max-w-3xl mx-auto pt-4 md:pt-8">
@@ -161,12 +193,14 @@ export default function MainPage() {
                 isLoading={isLoading}
               />
             </div>
-            {searchedWord ? (
+            {searchedWord && (
               <ResultCard
-                content={wordData[searchedWord]?.[currentMode] || result}
+                content={result}
                 isLoading={isLoading}
+                isStreaming={isStreaming}
                 currentMode={currentMode}
                 onModeChange={handleModeChange}
+                onRegenerate={handleRegenerate}
                 searchWord={searchedWord}
                 onExplainFurther={handleExplainFurther}
                 onCustomQuestion={handleCustomQuestion}
@@ -175,7 +209,8 @@ export default function MainPage() {
                 drillHistory={wordData[searchedWord]?.drills || []}
                 isFlipped={isFlipped}
               />
-            ) : (
+            )}
+            {!searchedWord && (
               <div className="text-center py-20 text-muted-foreground animate-fade-in">
                   <h2 className="text-2xl font-bold text-foreground">ようこそ！</h2>
                   <p className="mt-2">単語を検索して、AIによる解説をはじめましょう。</p>
