@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Trash2, BookOpen, Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { Trash2, BookOpen, Settings, Sun, Moon } from 'lucide-react'; // LogOutを削除
 import { useTheme } from 'next-themes';
 
 interface SidebarProps {
@@ -32,7 +32,7 @@ export default function Sidebar({ onHistoryClick }: SidebarProps) {
       {children}
     </button>
   );
-
+  
   const SettingButton = ({ isActive, onClick, children }: { isActive: boolean; onClick: () => void; children: React.ReactNode; }) => (
     <button
       onClick={onClick}
@@ -43,11 +43,6 @@ export default function Sidebar({ onHistoryClick }: SidebarProps) {
       {children}
     </button>
   );
-
-  const handleLogout = () => {
-    document.cookie = "loggedIn=; path=/; max-age=0";
-    window.location.reload();
-  };
 
   return (
     <aside className="w-64 bg-card p-3 border-r border-border flex flex-col h-full">
@@ -62,7 +57,7 @@ export default function Sidebar({ onHistoryClick }: SidebarProps) {
         </div>
       </div>
       
-      <div className="flex-grow overflow-y-auto mt-4">
+      <div className="flex-grow overflow-y-auto mt-4 custom-scrollbar">
         {activeTab === 'history' && (
           <div className="space-y-1">
             {searchHistory.length === 0 ? (
@@ -99,11 +94,7 @@ export default function Sidebar({ onHistoryClick }: SidebarProps) {
         )}
       </div>
       
-      <div className="flex-shrink-0 pt-2 border-t border-border">
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors text-sm">
-            <LogOut size={14}/> ログアウト
-          </button>
-      </div>
+      {/* ログアウトボタンを削除したため、下のdivは不要になります */}
     </aside>
   );
 }
