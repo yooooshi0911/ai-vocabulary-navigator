@@ -44,8 +44,12 @@ export default function DeepDiveFooter({
 
       {isAdditionalLoading && <div className="p-4 bg-background rounded-lg animate-pulse h-24"></div>}
       {additionalContent && (
-         <div className="p-4 bg-background rounded-lg prose max-w-none text-sm" dangerouslySetInnerHTML={{ __html: additionalContent }} />
-      )}
+  <div
+    className="p-4 bg-background rounded-lg prose max-w-none text-sm text-white"
+    dangerouslySetInnerHTML={{ __html: additionalContent }}
+  />
+)}
+
 
       <div className="pt-2">
         <form onSubmit={handleQuestionSubmit} className="relative w-full">

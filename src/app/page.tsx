@@ -3,34 +3,31 @@
 import { useState, useEffect, useCallback } from 'react';
 import { marked } from 'marked';
 import { useAppStore } from '@/store/useAppStore';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, ArrowRightLeft } from 'lucide-react';
 import SearchForm from '@/components/search/SearchForm';
 import ResultCard from '@/components/result/ResultCard';
 import Sidebar from '@/components/layout/Sidebar';
 
-type Mode = 'quick' | 'deep_dive';
+type Direction = 'en-ja' | 'ja-en';
+type DetailLevel = 'quick' | 'deep_dive';
+type Mode = `${DetailLevel}_${Direction}`;
 
 export default function MainPage() {
   const { 
     wordData, addWordToHistory, setWordData, addDrillDownData, 
-    isSidebarOpen, toggleSidebar, defaultMode 
+    isSidebarOpen, toggleSidebar 
   } = useAppStore();
 
   const [word, setWord] = useState('');
   const [searchedWord, setSearchedWord] = useState('');
   const [result, setResult] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentMode, setCurrentMode] = useState<Mode>(defaultMode);
+  const [currentMode, setCurrentMode] = useState<Mode>('quick_en-ja');
   const [additionalResult, setAdditionalResult] = useState('');
   const [isAdditionalLoading, setIsAdditionalLoading] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-
-  useEffect(() => {
-    // 【★バグ修正★】デフォルトモードがディープの時、isFlippedも追従させる
-    setCurrentMode(defaultMode);
-    setIsFlipped(defaultMode === 'deep_dive');
-  }, [defaultMode]);
+  const [direction, setDirection] = useState<Direction>('en-ja');
 
   useEffect(() => {
     const checkSidebar = () => {
@@ -72,10 +69,12 @@ export default function MainPage() {
   }, []);
 
   const handleMainSearch = useCallback(async (term: string, mode: Mode, forceRegenerate = false) => {
-    if (window.innerWidth < 768 && useAppStore.getState().isSidebarOpen) { useAppStore.getState().toggleSidebar(); }
+    if (window.innerWidth < 768 && useAppStore.getState().isSidebarOpen) {
+      useAppStore.getState().toggleSidebar();
+    }
     
     if (!forceRegenerate && wordData[term]?.[mode]) {
-      setResult(wordData[term][mode]!);
+      setResult(wordData[term][mode] as string);
       setSearchedWord(term);
       setAdditionalResult('');
       return;
@@ -97,7 +96,7 @@ export default function MainPage() {
       (finalHtml) => setWordData(term, mode, finalHtml)
     );
   }, [wordData, addWordToHistory, setWordData, streamApiCall]);
-
+  
   const handleDeepDrill = useCallback(async (type: 'explain_further' | 'custom_question', context: string, question?: string) => {
     setIsAdditionalLoading(true);
     setAdditionalResult('');
@@ -114,43 +113,52 @@ export default function MainPage() {
   }, [searchedWord, streamApiCall, addDrillDownData]);
 
   const handleExplainFurther = useCallback(() => {
-    const mainContent = wordData[searchedWord]?.deep_dive;
+    const mainContent = wordData[searchedWord]?.[currentMode];
     if (!mainContent) return;
-    const plainText = mainContent.replace(/<[^>]*>/g, '\n').replace(/\n+/g, '\n').trim();
+    const plainText = (mainContent as string).replace(/<[^>]*>/g, '\n').replace(/\n+/g, '\n').trim();
     handleDeepDrill('explain_further', plainText);
-  }, [wordData, searchedWord, handleDeepDrill]);
+  }, [wordData, searchedWord, currentMode, handleDeepDrill]);
   
   const handleCustomQuestion = useCallback((question: string) => {
-    const mainContent = wordData[searchedWord]?.deep_dive;
+    const mainContent = wordData[searchedWord]?.[currentMode];
     if (!mainContent) return;
-    const plainText = mainContent.replace(/<[^>]*>/g, '\n').replace(/\n+/g, '\n').trim();
+    const plainText = (mainContent as string).replace(/<[^>]*>/g, '\n').replace(/\n+/g, '\n').trim();
     handleDeepDrill('custom_question', plainText, question);
-  }, [wordData, searchedWord, handleDeepDrill]);
+  }, [wordData, searchedWord, currentMode, handleDeepDrill]);
 
   useEffect(() => {
-    if (searchedWord) { handleMainSearch(searchedWord, currentMode); }
+    if (searchedWord) {
+      handleMainSearch(searchedWord, currentMode);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMode, searchedWord]);
+  }, [searchedWord, currentMode]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!word.trim() || isLoading) return;
     if (searchedWord === word) return;
-    setCurrentMode(defaultMode);
-    setIsFlipped(defaultMode === 'deep_dive'); // ★バグ修正
+    
+    const newMode: Mode = `quick_${direction}`;
+    setIsFlipped(false);
+    setCurrentMode(newMode);
     setSearchedWord(word);
   };
   
   const handleHistoryClick = (historyWord: string) => {
+    const newDirection = /^[a-zA-Z0-9\s.,?!'"-]*$/.test(historyWord) ? 'en-ja' : 'ja-en';
+    const newMode: Mode = `quick_${newDirection}`;
+    
     setWord(historyWord);
-    setCurrentMode(defaultMode);
-    setIsFlipped(defaultMode === 'deep_dive'); // ★バグ修正
+    setDirection(newDirection);
+    setIsFlipped(false);
+    setCurrentMode(newMode);
     setSearchedWord(historyWord);
   };
 
-  const handleModeChange = (newMode: Mode) => {
-    setIsFlipped(newMode === 'deep_dive');
-    setCurrentMode(newMode);
+  const handleModeChange = () => {
+    const newFlipped = !isFlipped;
+    setIsFlipped(newFlipped);
+    setCurrentMode(prev => prev.startsWith('quick') ? `deep_dive_${direction}` : `quick_${direction}`);
   };
   
   const handleRegenerate = () => {
@@ -166,13 +174,24 @@ export default function MainPage() {
     setAdditionalResult('');
     setIsFlipped(false);
   };
+
+  const handleDirectionChange = () => {
+    const newDirection = direction === 'en-ja' ? 'ja-en' : 'en-ja';
+    setDirection(newDirection);
+    setWord('');
+    setSearchedWord('');
+    setResult('');
+    setAdditionalResult('');
+    setIsFlipped(false);
+    setCurrentMode(`quick_${newDirection}`);
+  };
   
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <div className={`fixed md:static z-30 h-full transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
         <Sidebar onHistoryClick={handleHistoryClick} />
       </div>
-      {isSidebarOpen && ( <div onClick={useAppStore.getState().toggleSidebar} className="fixed inset-0 bg-black/60 z-20 md:hidden" aria-hidden="true" /> )}
+      {isSidebarOpen && ( <div onClick={toggleSidebar} className="fixed inset-0 bg-black/60 z-20 md:hidden" aria-hidden="true" /> )}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="p-3 border-b border-border sticky top-0 z-20 flex items-center gap-2 bg-background/80 backdrop-blur-sm">
           <button onClick={toggleSidebar} className="md:hidden p-2 rounded-lg hover:bg-accent text-foreground">
@@ -191,14 +210,23 @@ export default function MainPage() {
                 setWord={setWord}
                 handleSubmit={handleSubmit}
                 isLoading={isLoading}
+                placeholder={direction === 'en-ja' ? '英単語を検索...' : '日本語を検索...'}
               />
+              {!searchedWord && (
+                <div className="flex justify-center mt-4">
+                  <button onClick={handleDirectionChange} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-card border border-border rounded-full shadow-sm hover:bg-accent transition-colors">
+                    <span>{direction === 'en-ja' ? '英語 → 日本語' : '日本語 → 英語'}</span>
+                    <ArrowRightLeft size={14} className="text-muted-foreground" />
+                  </button>
+                </div>
+              )}
             </div>
-            {searchedWord && (
+            {searchedWord ? (
               <ResultCard
                 content={result}
                 isLoading={isLoading}
                 isStreaming={isStreaming}
-                currentMode={currentMode}
+                currentMode={currentMode.startsWith('quick') ? 'quick' : 'deep_dive'}
                 onModeChange={handleModeChange}
                 onRegenerate={handleRegenerate}
                 searchWord={searchedWord}
@@ -208,12 +236,12 @@ export default function MainPage() {
                 isAdditionalLoading={isAdditionalLoading}
                 drillHistory={wordData[searchedWord]?.drills || []}
                 isFlipped={isFlipped}
+                translationDirection={direction}
               />
-            )}
-            {!searchedWord && (
+            ) : (
               <div className="text-center py-20 text-muted-foreground animate-fade-in">
                   <h2 className="text-2xl font-bold text-foreground">ようこそ！</h2>
-                  <p className="mt-2">単語を検索して、AIによる解説をはじめましょう。</p>
+                  <p className="mt-2">{direction === 'en-ja' ? '英単語を検索して、AIによる解説をはじめましょう。' : '日本語を入力して、自然な英訳を調べましょう。'}</p>
               </div>
             )}
           </div>

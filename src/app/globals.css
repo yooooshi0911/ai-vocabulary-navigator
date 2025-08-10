@@ -2,9 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --card-foreground: var(--foreground);
+  /* ring を hsl(...) にして他の変数と整合させる */
+  --ring: hsl(210 40% 50%);
+}
+
+/* サーバ側で html に .dark を付与していれば FOUC を防げます */
+html.dark { color-scheme: dark; }
+
 @layer base {
   :root {
-    /* ライトモード（デフォルト）: クリーンでモダンな配色 */
+    /* ライトモード（デフォルト） */
     --background: hsl(210 40% 98%);
     --foreground: hsl(222.2 84% 4.9%);
     --card: hsl(0 0% 100%);
@@ -18,10 +27,11 @@
     --muted-foreground: hsl(215.4 16.3% 46.9%);
     --accent: hsl(210 40% 90%);
     --accent-foreground: hsl(222.2 47.4% 11.2%);
+    --radius: 0.5rem;
   }
- 
+
   .dark {
-    /* ダークモード: 知的でモダンなダークブルー基調 */
+    /* ダークモード */
     --background: hsl(222.2 84% 4.9%);
     --foreground: hsl(210 40% 98%);
     --card: hsl(222.2 84% 8%);
@@ -35,13 +45,18 @@
     --muted-foreground: hsl(215 20.2% 65.1%);
     --accent: hsl(217.2 32.6% 25.5%);
   }
-}
 
-@layer base {
-  * { @apply border-border; }
+  /* 基本スタイル */
+  html, body {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: 'rlig' 1, 'calt' 1;
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
@@ -52,8 +67,26 @@
 .prose ul { @apply my-2 pl-5; list-style-type: disc; }
 .prose ul li { @apply my-1.5; }
 
-/* カードフリップアニメーション用 */
-.perspective { perspective: 1000px; }
-.preserve-3d { transform-style: preserve-3d; }
-.backface-hidden { backface-visibility: hidden; }
-.rotate-y-180 { transform: rotateY(180deg); }
+.backface-hidden.opacity-0 {
+  pointer-events: none;
+}
+
+.perspective {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.backface-hidden.opacity-0 {
+  pointer-events: none;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
