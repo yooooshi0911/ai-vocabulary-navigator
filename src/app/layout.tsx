@@ -9,22 +9,26 @@ export const metadata: Metadata = {
   title: "AI Vocabulary Navigator",
   description: "An English vocabulary learning app powered by Google AI.",
   manifest: "/manifest.json",
-
-  // 旧: themeColor: "#0f172a",
-  // → 正しくは themeColor はここに置く（viewportの外）
+  
+  // PWAのテーマカラー設定
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" }, // ライトモードの色
+    { media: "(prefers-color-scheme: dark)", color: "#020817" },  // ダークモードの色
   ],
 
+  // 【★ここを修正します★】
+  // viewport設定で、ユーザーによるスケーリングを無効化
   viewport: {
     width: "device-width",
     initialScale: 1,
+    maximumScale: 1,      // ズームインを禁止
+    userScalable: false,  // ユーザーによるすべてのズーム操作を禁止
   },
 
+  // iOSデバイスでホーム画面に追加したときの設定
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black",
+    statusBarStyle: "default",
     title: "AI Vocab",
   },
 };
@@ -32,14 +36,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    // 初期HTMLから dark クラスを付与
-    <html lang="ja" className="dark" suppressHydrationWarning>
+    <html lang="ja" suppressHydrationWarning>
       <body className={`font-sans ${inter.variable}`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );
