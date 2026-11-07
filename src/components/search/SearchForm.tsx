@@ -1,8 +1,7 @@
 "use client";
 
 import React from 'react';
-// ★ アイコンをインポート
-import { Search, Send } from 'lucide-react';
+import { Search, ArrowRight, X, Loader2 } from 'lucide-react';
 
 interface SearchFormProps {
   word: string;
@@ -20,38 +19,49 @@ export default function SearchForm({
   placeholder,
 }: SearchFormProps) {
   return (
-    // 【★改善点①】フォーム自体をFlexboxコンテナにする
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 md:gap-3">
-      {/* --- 入力欄部分 --- */}
-      <div className="relative flex-grow">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground z-10 pointer-events-none">
+    <form onSubmit={handleSubmit} className="relative group w-full">
+      <div className="relative flex items-center bg-card dark:bg-card/90 rounded-2xl border border-border/80 shadow-md hover:border-primary/50 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-200">
+        <div className="pl-4 sm:pl-5 text-muted-foreground group-focus-within:text-primary transition-colors pointer-events-none">
           <Search size={20} />
         </div>
+
         <input
-          type="search"
+          type="text"
           placeholder={placeholder}
           value={word}
           onChange={(e) => setWord(e.target.value)}
           disabled={isLoading}
-          className="w-full pl-12 pr-4 py-3 text-lg bg-card text-foreground rounded-xl focus:outline-none focus:ring-2 focus:ring-primary border border-border shadow-sm transition-all"
+          className="w-full px-3 py-3.5 sm:py-4 text-base sm:text-lg bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
           autoComplete="off"
+          autoFocus
         />
-      </div>
 
-      {/* 【★改善点②】送信ボタンを独立させる */}
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="flex-shrink-0 p-3 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        aria-label="検索"
-      >
-        {/* ローディング中はスピナー、それ以外は送信アイコンを表示 */}
-        {isLoading ? (
-          <div className="w-6 h-6 border-2 border-primary-foreground/50 border-t-primary-foreground rounded-full animate-spin"></div>
-        ) : (
-          <Send size={24} />
-        )}
-      </button>
+        <div className="flex items-center gap-1.5 pr-2 sm:pr-3">
+          {word && !isLoading && (
+            <button
+              type="button"
+              onClick={() => setWord('')}
+              className="p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-accent transition-colors"
+              aria-label="入力をクリア"
+            >
+              <X size={16} />
+            </button>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading || !word.trim()}
+            className="flex items-center justify-center h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-primary text-primary-foreground font-medium hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shadow-sm"
+            aria-label="検索する"
+          >
+            {isLoading ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <ArrowRight size={18} />
+            )}
+          </button>
+        </div>
+      </div>
     </form>
   );
 }

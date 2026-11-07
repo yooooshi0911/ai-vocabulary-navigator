@@ -1,31 +1,25 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
-export const metadata: Metadata = {
-  title: "AI Vocabulary Navigator",
-  description: "An English vocabulary learning app powered by Google AI.",
-  manifest: "/manifest.json",
-  
-  // PWAのテーマカラー設定
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8fafc" }, // ライトモードの色
-    { media: "(prefers-color-scheme: dark)", color: "#020817" },  // ダークモードの色
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#090d16" },
   ],
+};
 
-  // 【★ここを修正します★】
-  // viewport設定で、ユーザーによるスケーリングを無効化
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,      // ズームインを禁止
-    userScalable: false,  // ユーザーによるすべてのズーム操作を禁止
-  },
-
-  // iOSデバイスでホーム画面に追加したときの設定
+export const metadata: Metadata = {
+  title: "AI Vocabulary Navigator | Gemini 3.8 Flash搭載",
+  description: "Google Gemini 3.8 Flashによる高精度な英語・日本語AI単語ナビゲーター。発音、語源、類義語の使い分けまで深く学習。",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
