@@ -75,7 +75,10 @@ export default function MainPage() {
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(body) 
       });
-      if (!response.ok || !response.body) throw new Error("API Error");
+      if (!response.ok || !response.body) {
+        const errorMsg = await response.text().catch(() => '');
+        throw new Error(errorMsg || `API Error (${response.status})`);
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       while (true) {
@@ -85,9 +88,10 @@ export default function MainPage() {
         onChunk(marked.parse(fullText) as string);
       }
       onDone(marked.parse(fullText) as string);
-    } catch (error) {
+    } catch (error: any) {
       console.error("API Call failed:", error);
-      onChunk("<p class='text-red-500 font-medium'>エラーが発生しました。しばらく待ってから再度お試しください。</p>");
+      const displayMsg = error?.message || "エラーが発生しました。しばらく待ってから再度お試しください。";
+      onChunk(`<div class='p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 font-medium text-sm space-y-1.5'><p class='font-bold flex items-center gap-1.5'>⚠️ エラーが発生しました</p><p class='text-xs text-foreground/80 leading-relaxed'>${displayMsg}</p></div>`);
     } finally {
       setIsStreaming(false);
     }

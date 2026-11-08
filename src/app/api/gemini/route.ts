@@ -82,22 +82,65 @@ export async function POST(req: Request) {
         return new Response(`Error: Invalid mode "${mode}"`, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContentStream(prompt);
+    // モデル候補リスト（503過負荷や一時的利用不可に対応する自動フォールバック順）
+    const candidateModels = [
+      process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+    ].filter((m, i, arr) => arr.indexOf(m) === i); // 重複除去
+
+    let lastError: unknown = null;
+    let streamResult: any = null;
+    let usedModel: string = candidateModels[0];
+
+    // 利用可能なモデルで順次トライ
+    for (const mName of candidateModels) {
+      try {
+        console.log(`[Gemini API] Attempting model: ${mName}`);
+        const model = genAI.getGenerativeModel({ model: mName });
+        streamResult = await model.generateContentStream(prompt);
+        usedModel = mName;
+        break; // 成功したらループを抜ける
+      } catch (err: any) {
+        console.warn(`[Gemini API] Model ${mName} failed:`, err?.status || err?.message || err);
+        lastError = err;
+        // 次のモデルでリトライ
+      }
+    }
+
+    if (!streamResult) {
+      throw lastError || new Error("All candidate models failed");
+    }
 
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
-        for await (const chunk of result.stream) {
-          controller.enqueue(encoder.encode(chunk.text()));
+        try {
+          for await (const chunk of streamResult.stream) {
+            controller.enqueue(encoder.encode(chunk.text()));
+          }
+        } catch (streamErr) {
+          console.error("[Gemini Stream Error]", streamErr);
+          controller.enqueue(encoder.encode("\n\n*(生成途中で通信が中断されました。再度お試しください。)*"));
+        } finally {
+          controller.close();
         }
-        controller.close();
       },
     });
 
-    return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' }});
-  } catch (error) {
-    console.error("[API Error]", error);
-    return new Response("An internal server error occurred.", { status: 500 });
+    return new Response(stream, { 
+      headers: { 
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-Used-Model': usedModel,
+      }
+    });
+  } catch (error: any) {
+    console.error("[API Error Detail]", error);
+    const statusMsg = error?.status === 503 
+      ? "Google AIのサーバーが混雑しています（503 Service Unavailable）。少し時間をおいて再度お試しください。"
+      : "AIの生成中にエラーが発生しました。しばらく待ってから再度お試しください。";
+    return new Response(statusMsg, { status: error?.status || 500 });
   }
 }
