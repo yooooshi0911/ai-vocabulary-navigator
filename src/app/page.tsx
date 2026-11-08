@@ -265,11 +265,11 @@ export default function MainPage() {
                 <Compass size={18} />
               </div>
               <div>
-                <h1 className="text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2">
+                  <h1 className="text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2">
                   <span>AI Vocabulary Navigator</span>
                   <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
                     <Sparkles size={10} />
-                    Gemini 3.8 Flash
+                    Gemini 3.8 & 3.5 Flash
                   </span>
                 </h1>
               </div>
@@ -330,7 +330,7 @@ export default function MainPage() {
                 <div className="text-center space-y-3">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                     <Sparkles size={13} />
-                    <span>Gemini 3.8 Flash 搭載の新世代AI学習</span>
+                    <span>Gemini 3.8 Flash ＆ 3.5 Flash Lite 搭載</span>
                   </div>
                   <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
                     単語を「覚える」から、<br className="sm:hidden" />

@@ -7,10 +7,13 @@ export async function POST(req: Request) {
     const { word, mode, context, question } = await req.json();
     if (!mode) return new Response("Invalid request", { status: 400 });
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-    // ユーザー指定の Gemini 3.8 Flash（環境変数 GEMINI_MODEL での上書きも対応）
-    const defaultModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-    let modelName: string = defaultModel;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("[API Error] GEMINI_API_KEY is not set.");
+      return new Response("GEMINI_API_KEYが設定されていません。Vercelの環境変数を確認してください。", { status: 500 });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
     let prompt: string;
 
     switch (mode) {
@@ -82,65 +85,110 @@ export async function POST(req: Request) {
         return new Response(`Error: Invalid mode "${mode}"`, { status: 400 });
     }
 
-    // モデル候補リスト（503過負荷や一時的利用不可に対応する自動フォールバック順）
-    const candidateModels = [
-      process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-    ].filter((m, i, arr) => arr.indexOf(m) === i); // 重複除去
+    // ユーザー指定のハイブリッド構成:
+    // ⚡ 簡易検索: 日常的に高頻度で使うため 1日500回枠の Gemini 3.5 Flash Lite でサクサク即答
+    // 🎓 詳細解説 & AI質問: 最高峰の知能を持つ Gemini 3.8 Flash で濃厚な解説を出力
+    const isQuickMode = mode.startsWith('quick');
+    const candidateModels = isQuickMode
+      ? [
+          process.env.GEMINI_QUICK_MODEL || 'gemini-3.5-flash-lite',
+          'gemini-3.1-flash-lite',
+          'gemini-2.5-flash-lite',
+          'gemini-3.8-flash',
+          'gemini-2.5-flash',
+        ]
+      : [
+          process.env.GEMINI_DEEP_MODEL || 'gemini-3.8-flash',
+          'gemini-3.6-flash',
+          'gemini-3.5-flash-lite',
+          'gemini-2.5-flash',
+          'gemini-3.1-flash-lite',
+        ];
 
-    let lastError: unknown = null;
+    // 重複を削除
+    const uniqueCandidates = candidateModels.filter((m, i, arr) => arr.indexOf(m) === i);
+
+    let lastError: any = null;
     let streamResult: any = null;
-    let usedModel: string = candidateModels[0];
+    let firstChunkText = '';
+    let usedModel = uniqueCandidates[0];
 
-    // 利用可能なモデルで順次トライ
-    for (const mName of candidateModels) {
-      try {
-        console.log(`[Gemini API] Attempting model: ${mName}`);
-        const model = genAI.getGenerativeModel({ model: mName });
-        streamResult = await model.generateContentStream(prompt);
-        usedModel = mName;
-        break; // 成功したらループを抜ける
-      } catch (err: any) {
-        console.warn(`[Gemini API] Model ${mName} failed:`, err?.status || err?.message || err);
-        lastError = err;
-        // 次のモデルでリトライ
-      }
-    }
-
-    if (!streamResult) {
-      throw lastError || new Error("All candidate models failed");
-    }
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
+    // 503過負荷エラーを完全に撃退する多段リトライ＆フォールバック実行
+    for (const modelName of uniqueCandidates) {
+      // 503過負荷の際は1回リトライ（一時的混雑解消を待つ）
+      for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          for await (const chunk of streamResult.stream) {
-            controller.enqueue(encoder.encode(chunk.text()));
-          }
-        } catch (streamErr) {
-          console.error("[Gemini Stream Error]", streamErr);
-          controller.enqueue(encoder.encode("\n\n*(生成途中で通信が中断されました。再度お試しください。)*"));
-        } finally {
-          controller.close();
-        }
-      },
-    });
+          console.log(`[Gemini API] Requesting ${modelName} (attempt ${attempt}/${2}) for mode: ${mode}`);
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const result = await model.generateContentStream(prompt);
 
-    return new Response(stream, { 
-      headers: { 
-        'Content-Type': 'text/plain; charset=utf-8',
-        'X-Used-Model': usedModel,
+          // ★重要：ストリームの初回の chunk を実際に受信して 503 / 404 / 429 などのエラーがないかを先行検証
+          const iterator = result.stream[Symbol.asyncIterator]();
+          const firstChunk = await iterator.next();
+
+          if (firstChunk.done) {
+            throw new Error(`Empty response returned from ${modelName}`);
+          }
+
+          firstChunkText = firstChunk.value.text();
+          usedModel = modelName;
+
+          // 成功！残りのストリームを配信する ReadableStream を構築
+          const stream = new ReadableStream({
+            async start(controller) {
+              const encoder = new TextEncoder();
+              try {
+                // 初回チャンクを送出
+                controller.enqueue(encoder.encode(firstChunkText));
+
+                // 2回目以降のチャンクを順次送出
+                while (true) {
+                  const { done, value } = await iterator.next();
+                  if (done) break;
+                  controller.enqueue(encoder.encode(value.text()));
+                }
+              } catch (readErr) {
+                console.error("[Stream read error]", readErr);
+              } finally {
+                controller.close();
+              }
+            },
+          });
+
+          return new Response(stream, {
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'X-Used-Model': usedModel,
+            },
+          });
+        } catch (err: any) {
+          lastError = err;
+          const status = err?.status || (err?.message?.includes("503") ? 503 : null);
+          console.warn(`[Gemini API] ${modelName} attempt ${attempt} failed:`, err?.message || err);
+
+          // 503 Service Unavailable（Googleサーバー過負荷）の場合は1秒待って再試行
+          if ((status === 503 || err?.message?.includes("503") || err?.message?.includes("overloaded")) && attempt < 2) {
+            console.log(`[Gemini API] Retrying ${modelName} in 1200ms...`);
+            await new Promise((r) => setTimeout(r, 1200));
+            continue;
+          }
+
+          // それ以外の失敗や2回目失敗は次の候補モデルへ即座にフェイルオーバー
+          break;
+        }
       }
-    });
+    }
+
+    // すべてのモデルが失敗した場合のエラーハンドリング
+    console.error("[Gemini API] All candidate models failed. Last error:", lastError);
+    const errorStatus = lastError?.status || 500;
+    const errorMsg = errorStatus === 503
+      ? "Google AIのサーバーが混雑しています（503 Service Unavailable）。1〜2秒後にもう一度検索してください。"
+      : "AI解説の生成中にエラーが発生しました。しばらく待ってから再度お試しください。";
+
+    return new Response(errorMsg, { status: errorStatus });
   } catch (error: any) {
-    console.error("[API Error Detail]", error);
-    const statusMsg = error?.status === 503 
-      ? "Google AIのサーバーが混雑しています（503 Service Unavailable）。少し時間をおいて再度お試しください。"
-      : "AIの生成中にエラーが発生しました。しばらく待ってから再度お試しください。";
-    return new Response(statusMsg, { status: error?.status || 500 });
+    console.error("[API Unhandled Error]", error);
+    return new Response("サーバー内部エラーが発生しました。", { status: 500 });
   }
 }

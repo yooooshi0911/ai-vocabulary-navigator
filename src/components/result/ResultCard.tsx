@@ -191,11 +191,13 @@ const CardFace = React.forwardRef<HTMLDivElement, {
         {/* AIモデルバッジ */}
         <div className="flex items-center justify-between pt-3 pb-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <Sparkles size={12} className="text-primary" />
-            <span className="font-medium tracking-wide">Gemini 3.8 Flash</span>
+            <Sparkles size={12} className={currentMode === 'quick' ? 'text-blue-500' : 'text-purple-500'} />
+            <span className="font-semibold tracking-wide text-foreground">
+              {currentMode === 'quick' ? '⚡ Gemini 3.5 Flash Lite' : '🎓 Gemini 3.8 Flash'}
+            </span>
           </div>
           <span className="bg-muted px-2 py-0.5 rounded text-[10px]">
-            {currentMode === 'quick' ? 'クイック解説モード' : 'ディープダイブ詳細分析'}
+            {currentMode === 'quick' ? 'クイック即答モード (500回/日)' : 'ディープダイブ詳細分析 (最高精度)'}
           </span>
         </div>
 
@@ -212,7 +214,9 @@ const CardFace = React.forwardRef<HTMLDivElement, {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
             </span>
-            <span>Gemini 3.8 Flash が思考・生成中...</span>
+            <span>
+              {currentMode === 'quick' ? 'Gemini 3.5 Flash Lite が即答生成中...' : 'Gemini 3.8 Flash が深掘り分析中...'}
+            </span>
           </div>
         )}
       </div>
